@@ -1,0 +1,232 @@
+/*
+    Program Name: assign_Satellite
+    Date Written: 04/21/2024
+    Author      : Mucteba Karaca
+    Module Purpose:
+    This program takes the data that has been collected from a satellite onto a text file and interprets and 
+    displays this data to the ground station controllers.     
+*/
+// Includes any possibly necessary libraries using the standard namespace.
+#include <iostream>
+#include <fstream>
+#include <iomanip>
+#include <string>
+#include <cmath>
+#include <stdio.h>
+#include <stdint.h>
+
+using namespace std;
+
+// Makes an Enumerator that decides the type of information
+enum infoTypeEnum
+{
+    STATUS_INFO, EXPERIMENT_INFO, EMPTY
+};
+// Makes an Enumerator that decides the type of message being read
+enum messageTypeEnum
+{
+    statusMessage = 1, expMessage = 2
+};
+messageTypeEnum messageType; // Prepares the enumerator for use
+
+// Structure which holds the Status information
+struct StatusInfo 
+{
+    float_t temperature;
+    float_t voltage;
+};
+// Structure which holds the Experiment information
+struct ExpInfo
+{
+    uint16_t radCount;
+    uint16_t latchCount;
+};
+// Union which holds the structures that hold the information
+union Info 
+{
+    StatusInfo satInfo;
+    ExpInfo expInfo;
+};
+// Master structure which holds the type of information enumerated and the union which holds the info structures
+struct Master
+{
+    infoTypeEnum infoType;
+    Info masterUnion; 
+};
+
+// Sets cout to be groundstationchannel
+#define GroundStationOutputChannel cout
+
+
+// The main function
+int main()
+{
+    // Hold the min and max temp and volt values.
+    // Needs to be inverse at initialization so that all vals are greater than max and less than min.
+    float_t minTemp = 212, maxTemp = -50, minVolt = 100, maxVolt = 0;
+
+    // Names the file to be opened
+    const string TElEMETRY_INPUT_CHANNEL = "inputTelemetryData.txt";
+
+    // If stream for the file to be opened
+    ifstream telemetryInputChannel;
+
+    // Master array that holds last 5 readings
+    // Also prepares any necessary Master structure fields for use
+    Master array[5];
+    Master infoType;
+    Master masterUnion;
+    
+    // Opens the input file
+    telemetryInputChannel.open(TElEMETRY_INPUT_CHANNEL);
+
+    // Prepares the arrayIndex tracker and the typeOfMessage variable for use with the enumerator
+    uint16_t typeOfMessage;
+    uint16_t arrayIndex = 0;
+
+    // Sets all array entries to EMPTY by default
+    for (uint8_t i = 0; i < 5; i++)
+    {
+        array[i].infoType = EMPTY;
+    }
+
+    // Loops through the entries in the input file
+    while(telemetryInputChannel >> typeOfMessage)
+    {
+
+        // If the array index is greater than the 5th entry, loops to start. (Circular array)
+        if (arrayIndex > 4)
+        {
+            arrayIndex = 0;
+        }
+
+        GroundStationOutputChannel << "Current Telemetry Infromation: " << endl;
+        GroundStationOutputChannel << "------------------------------ " << endl;
+        
+        // makes messageType an enumerator value
+        messageType = static_cast<messageTypeEnum>(typeOfMessage);
+
+        GroundStationOutputChannel << fixed << setprecision(1) << showpoint;
+
+        // If the message is a status message.
+        if (messageType == statusMessage)
+        {
+            // Makes the array entry infoType status
+            array[arrayIndex].infoType = STATUS_INFO;
+
+            // Assigns temp and volt readings
+            telemetryInputChannel >> array[arrayIndex].masterUnion.satInfo.temperature;
+            telemetryInputChannel >> array[arrayIndex].masterUnion.satInfo.voltage;
+
+            // Displays to ground station current telemetry info
+            GroundStationOutputChannel << "Temperature : " << array[arrayIndex].masterUnion.satInfo.temperature << endl;
+            GroundStationOutputChannel << "Voltage     : " << array[arrayIndex].masterUnion.satInfo.voltage << endl;
+
+            // iterates the array
+            arrayIndex++;
+   
+        }
+        // If the message is an experiment message.
+        else if (messageType == expMessage)
+        {
+            // Makes the array entry infoType experiment
+            array[arrayIndex].infoType = EXPERIMENT_INFO;
+
+            // Assigns radiation count and latch event count
+            telemetryInputChannel >> array[arrayIndex].masterUnion.expInfo.radCount;
+            telemetryInputChannel >> array[arrayIndex].masterUnion.expInfo.latchCount;
+            
+            // Displays to ground station current telemetry info
+            GroundStationOutputChannel << "Radiation Count      : " << array[arrayIndex].masterUnion.expInfo.radCount << endl;
+            GroundStationOutputChannel << "Latch Up Events Count: " << array[arrayIndex].masterUnion.expInfo.latchCount << endl; 
+
+            // Iterates the array
+            arrayIndex++;
+
+        }
+
+        // Displays History
+        GroundStationOutputChannel << "History:" << endl;
+        GroundStationOutputChannel << "--------" << endl;
+
+        // Prepares counters for all necessary values
+        uint16_t radCounter = 0, latchCounter = 0;
+        uint16_t satCounter = 0, expCounter = 0;
+
+        // Loops through all array entries
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            // Checks what the infoType is of entry
+            switch(array[i].infoType)
+            {
+                // if Status information
+                case STATUS_INFO:
+                    // Displays accordingly
+                    GroundStationOutputChannel << "Temperature : " << array[i].masterUnion.satInfo.temperature << endl;
+                    GroundStationOutputChannel << "Voltage     : " << array[i].masterUnion.satInfo.voltage << endl;
+                    cout << endl;
+
+                    // Sets the min and max values for temp and volts
+                    if ((array[i].masterUnion.satInfo.temperature) < minTemp)
+                    {
+                        minTemp = (array[i].masterUnion.satInfo.temperature);
+                    }
+                    if ((array[i].masterUnion.satInfo.temperature) > maxTemp)
+                    {
+                        maxTemp = (array[i].masterUnion.satInfo.temperature);
+                    }
+                    if ((array[i].masterUnion.satInfo.voltage) < minVolt)
+                    {
+                        minVolt = (array[i].masterUnion.satInfo.voltage);
+                    }
+                    if ((array[i].masterUnion.satInfo.voltage) > maxVolt)
+                    {
+                        maxVolt = (array[i].masterUnion.satInfo.voltage);
+                    }
+
+                    // Increments status counter
+                    satCounter++;
+                    break;
+                // If experiment information
+                case EXPERIMENT_INFO:
+                    // Displays accordingly
+                    GroundStationOutputChannel << "Radiation Count       : " << array[i].masterUnion.expInfo.radCount << endl;
+                    GroundStationOutputChannel << "Latch Up Events Count : " << array[i].masterUnion.expInfo.latchCount << endl;
+                    cout << endl;
+
+                    // Maintains the running sum of counters.
+                    radCounter = radCounter + (array[i].masterUnion.expInfo.radCount);
+                    latchCounter = latchCounter + (array[i].masterUnion.expInfo.latchCount);
+
+                    // Increments experiment counter
+                    expCounter++;
+                    break;
+                // If empty do nothing
+                case EMPTY:
+                    break;
+            }
+        }
+
+        // Display the information as formatted using assignment pdf
+        GroundStationOutputChannel << "Summary Information" << endl;
+        GroundStationOutputChannel << "-------------------" << endl;
+        GroundStationOutputChannel << "Number of Satellite Information Records : " << satCounter << endl;
+        GroundStationOutputChannel << "Number of Experiment Information Records: " << expCounter << endl;
+        GroundStationOutputChannel << "Total Radiation Count      : " << radCounter << endl;
+        GroundStationOutputChannel << "Total Latch Up Event Count : " << latchCounter << endl;
+        GroundStationOutputChannel << "Maximum Temperature        : " << maxTemp << endl;
+        GroundStationOutputChannel << "Minimum Temperature        : " << minTemp << endl;
+        GroundStationOutputChannel << "Maximum Voltage            : " << maxVolt << endl;
+        GroundStationOutputChannel << "Minimum Voltage            : " << minVolt << endl;
+
+        GroundStationOutputChannel << "Press the enter key once or twice to continue..." << endl;
+        GroundStationOutputChannel << "================================================" << endl; cin.ignore(); cin.get();
+
+    }
+    GroundStationOutputChannel << "Program Done" << endl;
+
+    exit(EXIT_SUCCESS);
+
+    // Returns 0.
+    return 0;
+}
